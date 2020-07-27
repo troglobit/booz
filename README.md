@@ -1,5 +1,5 @@
-Booz -- Barebones Ooz, a Zoo Extractor/Lister by Rahul Dhesi
-============================================================
+Barebones Ooz, zoo Extractor/Lister
+===================================
 
 Booz is a small, memory-efficient, public domain Zoo archive extractor
 and lister.  It is not fancy.  It currently does not recognize any of

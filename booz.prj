@@ -1,0 +1,5 @@
+booz.c		(options.h zoo.h func.h)
+addbfcrc.c
+lzd.c		(options.h func.h)
+oozext.c	(options.h zoo.h oozio.h func.h)
+portable.c	(func.h zoo.h)

@@ -1,0 +1,19 @@
+#Make Booz -- makefile for Microsoft C 3.0.  Rename to `makefile' before use.
+
+OOZOBJS = addbfcrc.obj lzd.obj booz.obj oozext.obj portable.obj
+
+cswitch = -c -Oas -DMSC
+
+.c.obj :
+	cl $(cswitch) $*.c
+
+booz.exe : $(OOZOBJS)
+	cl $(OOZOBJS) -o booz
+
+booz.obj : options.h zoo.h func.h booz.c
+
+lzd.obj : options.h func.h lzd.c
+
+oozext.obj : options.h zoo.h oozio.h func.h oozext.c
+
+portable.obj : func.h zoo.h portable.c

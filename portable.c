@@ -1,19 +1,18 @@
 /* 
-The contents of this file are hereby released to the public domain.
-                                   -- Rahul Dhesi 1987/02/08
+This file is public domain.
+                                   -- Rahul Dhesi 1991/07/07
 */
 
 typedef char BYTE;      /* MUST be an 8-bit value */
 
-#include "func.h"
+#include "booz.h"
 #include "zoo.h"
+#include <stdio.h>
 
 long to_long ();
 int to_int ();
 int b_to_zooh();
 int b_to_dir();
-int splitlong();
-int splitint();
 
 /**********************
 to_long() converts four consecutive bytes, in order of increasing
@@ -23,7 +22,6 @@ byte order of the system.
 long to_long(data)
 BYTE data[];
 {
-   int i;
    long retval;
    retval = ((unsigned) data[2] & 0xff) | 
       (((unsigned) data[3] & 0xff) << 8);
@@ -46,30 +44,30 @@ BYTE data[];
 
 /**********************
 Function rd_zooh() reads a Zoo archive header in a machine-dependent manner,
-from a file handle.
+from an open file.
 */
-int rd_zooh (header, zoo_han)
+int rd_zooh (header, zoofile)
 struct zoo_header *header;
-int zoo_han;
+FILE *zoofile;
 {
    int status;
    BYTE bytes[SIZ_ZOOH];
-   status = read (zoo_han, (char *) bytes, SIZ_ZOOH);
+   status = fread((char *) bytes, 1, SIZ_ZOOH, zoofile);
    b_to_zooh (header, bytes);
-   return (status);
+   return status;
 }
 
 /**********************
 Function rd_dir() reads a directory entry in a machine-independent manner
-from a handle.
+from an open file.
 */
-int rd_dir(direntry, zoo_han)
+int rd_dir(direntry, zoofile)
 struct direntry *direntry;
-int zoo_han;
+FILE *zoofile;
 {
    int status;
    BYTE bytes[SIZ_DIR];
-   status = read (zoo_han, (char *) bytes, SIZ_DIR);
+   status = fread((char *) bytes, 1, SIZ_DIR, zoofile);
    b_to_dir (direntry, bytes);
    return (status);
 }

@@ -1,8 +1,8 @@
 /* oozext.c -- extracts files from archive */
 
-/* The contents of this file are hereby released to the public domain.
+/* Main extraction module.  This file is public domain.
 
-                                   -- Rahul Dhesi 1987/02/08
+                                   -- Rahul Dhesi 1991/07/07
 
 The function fixfname() is currently defined to be empty but may be
 activated if needed to fix filename syntax to be legal for your
@@ -11,40 +11,23 @@ a sample implementation of fixfname().  Currently, fixfname() is used
 only if the symbol FIXFNAME is defined.
 */
 
-#include "options.h"
+#include "booz.h"
 #include "zoo.h"
-#include "oozio.h"
-#include "func.h"
+#include <stdio.h>
 
 extern unsigned int crccode;
 
-#ifndef TINY
 int needed ();
-#endif
 
-#ifdef TINY
-int oozext (zoo_path)
-char *zoo_path;
-#endif
-
-#ifdef SMALL
-int oozext (zoo_path, argc, argv)
-char *zoo_path;
-int argc;
-char *argv[];
-#endif
-
-#ifdef BIG
 int oozext (zoo_path, option, argc, argv)
 char *zoo_path;
 char *option;
 int argc;
 char *argv[];
-#endif
 
 {
-int zoo_han;                              /* handle for open archive */
-int this_han;                             /* handle of file to extract */
+FILE *zoofile;                            /* open archive */
+FILE *this_file;                          /* file to extract */
 long next_ptr;                            /* pointer to within archive */
 struct zoo_header zoo_header;             /* header for archive */
 int status;                               /* error status */
@@ -53,12 +36,9 @@ int all = 0;                              /* overwrite all? */
 static char vermsg[] = "A higher version of Ooz is needed to extract ";
 int exitstat = 0;                         /* return code */
 
-#ifdef BIG
 int first_time = 1;
 static char *month_list="000JanFebMarAprMayJunJulAugSepOctNovDec";
-#endif
 
-#ifndef TINY
 {
    /* If no dot in name, add ".zoo" extension */
    char *p;
@@ -74,19 +54,18 @@ static char *month_list="000JanFebMarAprMayJunJulAugSepOctNovDec";
       zoo_path = p;
    }
 }
-#endif
 
-zoo_han = OPEN(zoo_path);
+zoofile = OPEN(zoo_path);
 
-if (zoo_han == -1)
+if (zoofile == NULL)
    prterror ('f', "Could not open ", zoo_path, "\n");
 
 /* read header */
-rd_zooh (&zoo_header, zoo_han);
-lseek (zoo_han, zoo_header.zoo_start, 0); /* seek to where data begins */
+rd_zooh (&zoo_header, zoofile);
+fseek(zoofile, zoo_header.zoo_start, 0); /* seek to where data begins */
 
 while (1) {
-   rd_dir (&direntry, zoo_han);
+   rd_dir (&direntry, zoofile);
 
    if (direntry.lo_tag != LO_TAG || direntry.hi_tag != HI_TAG)
          prterror ('f', "Bad entry in archive\n", 
@@ -96,14 +75,11 @@ while (1) {
    }
    next_ptr = direntry.next;                 /* ptr to next dir entry */
 
-#ifndef TINY
       /* See if this file is wanted */
       if (!needed (direntry.fname, argc, argv)) {
          goto loop_again;
       }
-#endif
 
-#ifdef BIG
   /* If list needed, give information and loop again */
    if (*option == 'l') {
       char outstr[80];
@@ -161,11 +137,10 @@ while (1) {
 
      goto loop_again;
    }
-#endif /* SMALL */
 
 
-   if (direntry.major_ver > 1 ||
-         (direntry.major_ver == 1 && direntry.minor_ver > 0)) {
+   if (direntry.major_ver > 2 ||
+         (direntry.major_ver == 2 && direntry.minor_ver > 1)) {
       prterror ('e', vermsg, direntry.fname, "\n");
       goto loop_again;
    }
@@ -176,27 +151,20 @@ while (1) {
 #endif
 
 
-#ifndef TINY
    /* See if this file already exists */
 
-#ifdef BIG
-   if (*option != 't' && !all)
-#else
-   if (!all)
-#endif
-   {
-
-      this_han = OPEN(direntry.fname);
-      if (this_han != -1) {
+   if (*option != 't' && !all) {
+      this_file = OPEN(direntry.fname);
+      if (this_file != NULL) {
          char ans[2];
          char ans2[2];
-         close (this_han);
+         fclose(this_file);
    
          do {
             prterror ('m', "Overwrite ", direntry.fname, " (Yes/No/All)? ");
-            read (0, ans, 1);
+            fread(ans, 1, 1, stdin);
             do {
-               read (0, ans2, 1);
+	       fread(ans2, 1, 1, stdin);
             } while (*ans2 != '\n');
          }  while (*ans != 'y' && *ans != 'Y' && 
                    *ans != 'n' && *ans != 'N' &&
@@ -210,27 +178,26 @@ while (1) {
          }
       }
    }
-#endif /* ndef TINY */
 
-
-#ifdef BIG
    if (*option == 't')
-      this_han = -2;
+      this_file = NULL;
    else
-#endif
-      this_han = CREATE(direntry.fname);
+      this_file = CREATE(direntry.fname);
 
-   if (this_han == -1) {
+   if (*option != 't' && this_file == NULL) {
       prterror ('e', "Could not open ", direntry.fname, " for output.\n");
    } else {
-      lseek (zoo_han, direntry.offset, 0);
+      fseek(zoofile, direntry.offset, 0);
       crccode = 0;      /* Initialize CRC before extraction */
-      prterror ('m', direntry.fname, " ", ((char *) 0));
+      putstr(direntry.fname);
+      putstr(" ");
 
       if (direntry.packing_method == 0)
-         status = getfile (zoo_han, this_han, direntry.size_now);
+         status = getfile(zoofile, this_file, direntry.size_now);
       else if (direntry.packing_method == 1)
-         status = lzd (zoo_han, this_han); /* uncompress */
+         status = lzd(zoofile, this_file); /* uncompress */
+      else if (direntry.packing_method == 2)
+         status = lzh_decode(zoofile, this_file); /* uncompress */
       else
          prterror ('e', vermsg, direntry.fname, "\n");
       if (status != 0) {
@@ -243,20 +210,19 @@ while (1) {
          if (direntry.file_crc != crccode) {
             putstr ("<--\007WARNING:  Bad CRC.\n");
             exitstat = 1;
-         } else
+         } else {
             putstr ("\n");
+	 }
       } /* end if */
    } /* end if */
 
-#ifdef BIG
    if (*option != 't')
-#endif
-      close (this_han);
+      fclose(this_file);
 
 loop_again:
-   lseek (zoo_han, next_ptr, 0); /* ..seek to next dir entry */
+   fseek(zoofile, next_ptr, 0); /* ..seek to next dir entry */
 } /* end while */
-close (zoo_han);
+fclose(zoofile);
 exit (exitstat);
 } /* end oozext */
 

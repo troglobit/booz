@@ -1,117 +1,61 @@
-#define  VERSION  "Version 1.02 (1988/08/25)\n"
+#define  VERSION  "Version 2.0 (1991/07/07)\n"
 
-/* booz.c -- small, memory-efficient Barebones Ooz to extract Zoo archives.
+/* booz.c -- small, memory-efficient zoo archive extractor/lister.
+This file is public domain.
 
-For maximum portability, Booz does not use the data type `unsigned long'.
-
-The functions and system calls required by Tiny Booz are:
-   read()
-   write()
-   strlen()
-   exit()
-   malloc()
-   lseek()
-   open() and/or creat()
-   close()
-   unlink()                -- may be defined to be an empty function
-
-
-Small Booz additionally uses the following functions:
-   strcat()
-   strcpy()
-
-Big Booz additionally use the following function:
-   strncat()
+                                    -- Rahul Dhesi 1991/07/07
 */
 
-/* 
-The contents of this file are hereby released to the public domain.
-
-                                   -- Rahul Dhesi 1988/08/25
-*/
-
-#include "options.h"
-#include "func.h"
+#include "booz.h"
 #include "zoo.h"
+#include <stdio.h>
 
 main(argc,argv)
 register int argc;
 register char **argv;
 {
-#ifdef TINY
-   static char usage[]=
-      "Usage:  booz archive.zoo\n";
-   if (argc < 2) {
-      putstr ("Public domain Barebones Ooz\nZoo archive extractor (Tiny) by Rahul Dhesi\n");
-      putstr (VERSION);
-      putstr (usage);
-      exit (1);
-   }
-#endif
-
-#ifdef SMALL
-   static char usage[]=
-      "Usage:  booz archive[.zoo] [ file ... ]\n";
-   if (argc < 2) {
-      putstr ("Public domain Barebones Ooz\nZoo archive extractor (Small) by Rahul Dhesi\n");
-      putstr (VERSION);
-      putstr (usage);
-      exit (1);
-   }
-#endif
-
-#ifdef BIG
+   char *p;
    static char usage[]=
       "Usage:  booz {lxt} archive[.zoo] [ file ... ]\n";
    if (argc < 3) {
-      putstr ("Public domain Barebones Ooz\nZoo archive extractor/lister (Big) by Rahul Dhesi\n");
+      putstr ("Public domain zoo archive extractor/lister by Rahul Dhesi\n");
       putstr (VERSION);
       putstr (usage);
       putstr ("l = list, x = extract, t = test\n");
       exit (1);
    }
-#endif
 
-#ifdef TINY
-   oozext (argv[1]);
-#endif
+   gentab();		/* generate CRC table */
 
-#ifdef SMALL
-   oozext (argv[1], argc - 2, &argv[2]);
-#endif
-
-#ifdef BIG
-   {
-      char *p;
-      p = argv[1];
-      if (*p == 'L')
-         *p = 'l';
-      if (*p == 'X')
-         *p = 'x';
-      if (*p == 'T')
-         *p = 't';
-      if (*p != 'l' && *p != 'x' && *p != 't') {
-         putstr (usage);
-         exit (1);
-      }
-      oozext (argv[2], p, argc - 3, &argv[3]);
+   p = argv[1];
+   if (*p == 'L')
+      *p = 'l';
+   if (*p == 'X')
+      *p = 'x';
+   if (*p == 'T')
+      *p = 't';
+   if (*p != 'l' && *p != 'x' && *p != 't') {
+      putstr (usage);
+      exit (1);
    }
-#endif
-
+      oozext (argv[2], p, argc - 3, &argv[3]);
    exit (0);
 }
 
 /**********************/
 /* putstr()
-This function prints a string to the standard output handle without
-using printf() or the standard I/O library.  If a null string, nothing 
-is printed (not even the null character).
-*/
+This function prints a string to standard output without using
+printf(). If a null string, nothing is printed.  */
+
 int putstr (str)
 register char *str;
 {
-   if (str != (char *) 0)
-      write (1, str, strlen(str));
+   register int count;
+   if (str == NULL)
+      return;
+   count = strlen(str);
+   if (count != 0)
+      fwrite (str, 1, count, stdout);
 }
 
 /**********************/
@@ -158,37 +102,36 @@ char *a, *b, *c;
 }
 
 /*************
-This function copies count characters from the source file to the
-destination Function return value is 0 if no error, 2 if write error,
+This function copies 'count' characters from the source file to the
+destination. Function return value is 0 if no error, 2 if write error,
 and 3 if read error.  
 
-The global variable crccode is updated.
+The global variable 'crccode' is updated.
 */
 extern char out_buf_adr[];
 
-int getfile(input_han, output_han, count)
-int input_han, output_han;
+int getfile(infile, outfile, count)
+FILE *infile;
+FILE *outfile;
 long count;
 {
    register int how_much;
 
    while (count > 0) {
-      if (count > OUT_BUF_SIZE)
-         how_much = OUT_BUF_SIZE;
+      if (count > MEM_BLOCK_SIZE)
+         how_much = MEM_BLOCK_SIZE;
       else
          how_much = count;
       count -= how_much;
-      if (read (input_han, out_buf_adr, how_much) != how_much)
+      if (fread (out_buf_adr, 1, how_much, infile) != how_much)
          return (3);
       addbfcrc (out_buf_adr, how_much);
-      if (output_han != -2 &&
-            write (output_han, out_buf_adr, how_much) != how_much)
+      if (outfile != NULL &&
+            fwrite (out_buf_adr, 1, how_much, outfile) != how_much)
          return (2);
    }
    return (0);
 }
-
-#ifndef TINY
 
 int needed (fname, argc, argv)
 char *fname;
@@ -242,14 +185,11 @@ register char *string, *pattern;
    }
 }
 
-#endif /* ndef TINY */
-
 int memerr()
 {
-   prterror ('f', "Ran out of memory\n");
+   prterror ('f', "Ran out of memory\n", (char *) 0, (char *) 0);
 }
 
-#ifdef BIG
 /* cfactor() calculates the compression factor given a directory entry */
 int cfactor (org_size, size_now)
 long org_size, size_now;
@@ -315,5 +255,3 @@ overflow:                                 /* bad value filled with stars */
    buf[buflen-1] = '\0';
    return (buf);
 }
-
-#endif /* BIG */
